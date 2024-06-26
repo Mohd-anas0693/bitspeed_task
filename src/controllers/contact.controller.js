@@ -3,16 +3,41 @@ const Contact = require('../models/contact.model');
 const asyncHandler = require('../utils/asyncHandler')
 const ApiResponse = require('../utils/apiResponse');
 const ApiErrors = require('../utils/apiErrors');
-function createResponse(primaryContactId, emails, phoneNumbers, secondaryContactIds) {
+
+function createResponse(arr) {
+    let primaryContactId;
+
+    const emailArr = [];
+    const phoneNumberArr = [];
+    const secondaryContactIdsArr = [];
+
+    arr.forEach(contact => {
+
+        const obj = contact.toJSON();
+
+        if (obj.linkPrecedence == 'primary') {
+
+            primaryContactId = obj.id;
+            emailArr.push(obj.email);
+            phoneNumberArr.push(obj.phoneNumber);
+
+        } else if (obj.linkPrecedence == 'secondary') {
+
+            emailArr.push(obj.email)
+            phoneNumberArr.push(obj.phoneNumber)
+            secondaryContactIdsArr.push(obj.id)
+        }
+    })
     return {
         contact: {
             primaryContactId: primaryContactId,
-            emails: emails,
-            phoneNumbers: phoneNumbers,
-            secondaryContactIds: secondaryContactIds,
+            emails: Array.from(new Set(emailArr)),
+            phoneNumbers: Array.from(new Set(phoneNumberArr)),
+            secondaryContactIds: secondaryContactIdsArr,
         }
     }
-};
+
+}
 module.exports = {
     createContact: asyncHandler(async (req, res) => {
 
@@ -31,7 +56,6 @@ module.exports = {
         }
 
         const existingContacts = await Contact.findAll({ where: condition });
-        // console.log("ExistingContact : ", existingContacts);
 
         let newContact;
         if (existingContacts.length === 0 || !existingContacts[0]) {
@@ -40,27 +64,49 @@ module.exports = {
 
             if (!newContact) throw new ApiErrors(500, "Server Error! Insertion Failed.");
 
-            const { id, email, phoneNumber, linkedId } = newContact.toJSON();
-
-            return res.status(200).json(new ApiResponse(200, createResponse(id, [email], [phoneNumber], linkedId), "yes"));
+            return res.status(200).json(new ApiResponse(200, createResponse([newContact]), "yes"));
         }
-        // console.log('ExistingContacts:', existingContacts)
-        const primaryContact = existingContacts.find(obj => obj.toJSON().linkedId == null && obj.toJSON().linkPrecedence === "primary")
 
-        // console.log("Primary Contact: ", primaryContact.toJSON());
+        let primaryContact = existingContacts.find(obj => obj.toJSON().email == userEmail && obj.toJSON().linkPrecedence == 'primary' && obj.toJSON().linkedId == null)
+        let updateStatus;
+
+        if (primaryContact.length != 0) {
+            existingContacts.forEach(async obj => {
+                const jsonObj = obj.toJSON();
+
+                if (jsonObj.phoneNumber == userPhoneNumber) {
+                    updateStatus = true
+                    await Contact.update({ linkedId: primaryContact.toJSON().id, linkPrecedence: 'secondary' }, { where: { id: jsonObj.id } });
+                    // if (!updatedContact) throw ApiErrors(500, "vjvnfn");
+                }
+            })
+
+        }
+
+        if (updateStatus == true) {
+
+            const userContacts = await Contact.findAll({ where: condition });
+
+            console.log("userContacts: ", userContacts.map(obj => obj.toJSON()));
+            
+            const data = createResponse(userContacts);
+            return res.status(200).json(new ApiResponse(200, data));
+        }
+
+        primaryContact = existingContacts.find(obj => obj.toJSON().linkedId == null && obj.toJSON().linkPrecedence === "primary")
 
         const newSecondaryContact = await Contact.create({
             phoneNumber: userPhoneNumber,
             email: userEmail,
-            linkedId: primaryContact.id,
+            linkedId: primaryContact.toJSON().id,
             linkPrecedence: "secondary"
         });
 
         if (!newSecondaryContact) throw new ApiErrors(500, "Not able Insert value in Database");
-        console.log("newSecondaryContact : ", newSecondaryContact.toJSON());
-        const allContacts = [...existingContacts, newSecondaryContact];
 
-        // console.log(allContacts)
-        return res.status(200).json(new ApiResponse(200, allContacts, "yes"));
+        const userContacts = [...existingContacts, newSecondaryContact];
+
+        const data = createResponse(userContacts);
+        return res.status(200).json(data);
     })
 }
