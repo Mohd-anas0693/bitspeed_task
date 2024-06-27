@@ -1,8 +1,8 @@
-const { Op } = require("sequelize");
+const { Op,where } = require("sequelize");
 const Contact = require('../models/contact.model');
 const asyncHandler = require('../utils/asyncHandler')
-const ApiResponse = require('../utils/apiResponse');
 const ApiErrors = require('../utils/apiErrors');
+const { ErrorMessage } = require("../utils/message");
 
 function createResponse(arr) {
     let primaryContactId;
@@ -41,45 +41,51 @@ function createResponse(arr) {
 module.exports = {
     createContact: asyncHandler(async (req, res) => {
 
-        const { userPhoneNumber, userEmail } = req.body;
+        const { phoneNumber, email } = req.body;
+        
 
+        if (!phoneNumber && !email) throw new ApiErrors(400, ErrorMessage.fieldsRequired);
 
-        if ([userPhoneNumber, userEmail].some((fields) => fields == undefined || "")) {
-            throw new ApiErrors(400, "Error! Missing fields");
-        }
 
         const condition = {
             [Op.or]: [
-                { phoneNumber: userPhoneNumber },
-                { email: userEmail }
+                { phoneNumber: phoneNumber },
+                { email: email }
             ]
         }
 
         const existingContacts = await Contact.findAll({ where: condition });
 
+        if (!phoneNumber || !email) return res.status(200).json(createResponse(existingContacts));;
+
         let newContact;
-        if (existingContacts.length === 0 || !existingContacts[0]) {
 
-            newContact = await Contact.create({ phoneNumber: userPhoneNumber, email: userEmail, linkedId: null, linkPrecedence: "primary" });
+        if (!Array.isArray(existingContacts) || existingContacts.length == 0) {
 
+
+            newContact = await Contact.create({ phoneNumber: phoneNumber, email: email, linkedId: null, linkPrecedence: "primary" });
+            console.log("newContact : ", newContact);
             if (!newContact) throw new ApiErrors(500, "Server Error! Insertion Failed.");
 
-            return res.status(200).json(new ApiResponse(200, createResponse([newContact]), "yes"));
+            return res.status(200).json(createResponse([newContact]));
         }
 
-        let primaryContact = existingContacts.find(obj => obj.toJSON().email == userEmail && obj.toJSON().linkPrecedence == 'primary' && obj.toJSON().linkedId == null)
-        let updateStatus;
+        let primaryContact = existingContacts.find(obj => obj.toJSON().email == email && obj.toJSON().linkPrecedence == 'primary' && obj.toJSON().linkedId == null)
+        let updateStatus = false;
+    
 
-        if (primaryContact.length != 0) {
-            existingContacts.forEach(async obj => {
-                const jsonObj = obj.toJSON();
+        if (primaryContact) {
+            for (let index = 0; index < existingContacts.length; index++) {
 
-                if (jsonObj.phoneNumber == userPhoneNumber) {
-                    updateStatus = true
+                const jsonObj = existingContacts[index].toJSON();
+                console.log("JsonObj: " + jsonObj.phoneNumber);
+
+                if (jsonObj.phoneNumber == phoneNumber  ) {
                     await Contact.update({ linkedId: primaryContact.toJSON().id, linkPrecedence: 'secondary' }, { where: { id: jsonObj.id } });
-                    // if (!updatedContact) throw ApiErrors(500, "vjvnfn");
+                    updateStatus = true;
                 }
-            })
+                
+            }
 
         }
 
@@ -88,16 +94,16 @@ module.exports = {
             const userContacts = await Contact.findAll({ where: condition });
 
             console.log("userContacts: ", userContacts.map(obj => obj.toJSON()));
-            
+
             const data = createResponse(userContacts);
-            return res.status(200).json(new ApiResponse(200, data));
+            return res.status(200).json(data);
         }
 
         primaryContact = existingContacts.find(obj => obj.toJSON().linkedId == null && obj.toJSON().linkPrecedence === "primary")
 
         const newSecondaryContact = await Contact.create({
-            phoneNumber: userPhoneNumber,
-            email: userEmail,
+            phoneNumber: phoneNumber,
+            email: email,
             linkedId: primaryContact.toJSON().id,
             linkPrecedence: "secondary"
         });

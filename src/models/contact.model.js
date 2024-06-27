@@ -8,11 +8,11 @@ const Contact = sequelize.define("Contact", {
     },
     phoneNumber: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
     },
     email: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true ,
     },
     linkedId: {
         type: DataTypes.INTEGER,
