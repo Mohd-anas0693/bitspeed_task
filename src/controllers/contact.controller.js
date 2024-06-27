@@ -44,7 +44,7 @@ module.exports = {
         const { phoneNumber, email } = req.body;
         
 
-        if (!phoneNumber && !email) throw new ApiErrors(400, ErrorMessage.fieldsRequired);
+        if (!phoneNumber && !email) return res.status(400).json({statusCode: 400, status: 'Error' , message : ErrorMessage.fieldsRequired});
 
 
         const condition = {
@@ -64,8 +64,6 @@ module.exports = {
 
 
             newContact = await Contact.create({ phoneNumber: phoneNumber, email: email, linkedId: null, linkPrecedence: "primary" });
-            console.log("newContact : ", newContact);
-            if (!newContact) throw new ApiErrors(500, "Server Error! Insertion Failed.");
 
             return res.status(200).json(createResponse([newContact]));
         }
@@ -78,7 +76,6 @@ module.exports = {
             for (let index = 0; index < existingContacts.length; index++) {
 
                 const jsonObj = existingContacts[index].toJSON();
-                console.log("JsonObj: " + jsonObj.phoneNumber);
 
                 if (jsonObj.phoneNumber == phoneNumber  ) {
                     await Contact.update({ linkedId: primaryContact.toJSON().id, linkPrecedence: 'secondary' }, { where: { id: jsonObj.id } });
@@ -93,7 +90,6 @@ module.exports = {
 
             const userContacts = await Contact.findAll({ where: condition });
 
-            console.log("userContacts: ", userContacts.map(obj => obj.toJSON()));
 
             const data = createResponse(userContacts);
             return res.status(200).json(data);

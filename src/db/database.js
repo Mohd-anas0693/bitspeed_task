@@ -1,7 +1,6 @@
 const { Sequelize } = require('sequelize');
 
 const connectionString = process.env.DB_SECRET;
-console.log("connectionString: ", connectionString);
 const sequelize = new Sequelize(connectionString, {
     dialectOptions: {
         ssl: {
